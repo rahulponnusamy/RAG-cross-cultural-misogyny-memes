@@ -224,3 +224,6 @@ examples/*.example.json
 
 # Streamlit
 .streamlit/secrets.toml
+
+datasets/
+prediction/
