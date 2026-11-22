@@ -129,7 +129,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--submission", type=Path, required=True, help="participant JSON or JSONL")
     ap.add_argument("--queries", type=Path, help="override the discovered query CSV")
     ap.add_argument("--train", type=Path, help="override the discovered training CSV")
-    ap.add_argument("--gold", type=Path, help="override the discovered private gold CSV")
+    ap.add_argument("--gold", type=Path, help="override the Task B gold CSV (defaults to the query CSV)")
     ap.add_argument("--query-images", type=Path, help="override the discovered query image folder")
     ap.add_argument("--train-images", type=Path, help="override the discovered training image folder")
     ap.add_argument("--model", default=DEFAULT_MODEL)
@@ -149,27 +149,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def discover_data_paths(language: str) -> dict[str, Path]:
     """Find standard language inputs, with support for the checked-in Tamil layout."""
     language_root = PROJECT_ROOT / "datasets" / language
-    standard = {
-        "queries": language_root / "test.csv",
-        "train": language_root / "train.csv",
-        "gold": PROJECT_ROOT / "private" / language / "gold.csv",
-        "query_images": language_root / "test_images",
-        "train_images": language_root / "train_images",
-    }
-    if standard["queries"].is_file() and standard["train"].is_file():
-        return standard
-
+    train = language_root / "train"
+    development = language_root / "development"
+    legacy = language_root / "train & dev"
     if language == "tamil":
-        legacy_root = language_root / "test-with-labels"
-        legacy_train = language_root / "train & dev" / "train"
-        return {
-            "queries": legacy_root / "test.csv",
-            "train": legacy_train / "train.csv",
-            "gold": legacy_root / "test.csv",
-            "query_images": legacy_root,
-            "train_images": legacy_train,
-        }
-    return standard
+        if not (train / "train.csv").is_file() and (legacy / "train" / "train.csv").is_file():
+            train = legacy / "train"
+        if not (development / "development.csv").is_file() and (legacy / "dev" / "dev.csv").is_file():
+            development = legacy / "dev"
+    query_csv = development / ("dev.csv" if development == legacy / "dev" else "development.csv")
+    return {
+        "queries": query_csv,
+        "train": train / "train.csv",
+        "query_images": development,
+        "train_images": train,
+    }
 
 
 def run_task_a(
@@ -224,9 +218,10 @@ def run_task_b(
     submission: dict[str, dict[str, Any]],
     label_columns: tuple[str, ...],
 ) -> dict[str, Any]:
-    if not args.gold:
-        raise EvaluationError("Task B requires a private gold CSV. Set it in private/<language>/gold.csv or pass --gold.")
-    gold = load_csv_records(args.gold, required=("image_id", *label_columns))
+    try:
+        gold = load_csv_records(args.gold, required=("image_id", *label_columns))
+    except EvaluationError as exc:
+        raise EvaluationError(f"Task B needs gold label columns in {args.gold}; use --gold to select a labeled CSV. {exc}") from exc
     gold = {qid: row for qid, row in gold.items() if qid in submission}
     return score_task_b(submission, gold, language=args.language)
 
@@ -239,7 +234,7 @@ def main(argv: list[str] | None = None) -> None:
     discovered = discover_data_paths(args.language)
     args.queries = args.queries or discovered["queries"]
     args.train = args.train or discovered["train"]
-    args.gold = args.gold or discovered["gold"]
+    args.gold = args.gold or args.queries
     args.query_images = args.query_images or discovered["query_images"]
     args.train_images = args.train_images or discovered["train_images"]
 

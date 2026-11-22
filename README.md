@@ -23,17 +23,22 @@ Place each language's dataset in this structure:
 
 ```text
 datasets/<language>/
-  train.csv
-  test.csv
-  train_images/
-  test_images/
+  train/
+    train.csv
+    <training images>
+  development/
+    development.csv
+    <development images>
+  test/
+    test.csv
+    <test images>
 ```
 
 The evaluator discovers these files automatically. The existing Tamil folder layout is also supported. The query and training CSVs require `image_id` and `transcriptions` columns. The training CSV also needs the label columns shown below. Query and training IDs must be distinct.
 
 For Task A, image filenames must match their `image_id`, such as `123.jpg`. JPG, JPEG, PNG, and WEBP images are supported, including images in nested folders.
 
-Task B scoring requires an organizer gold file at `private/<language>/gold.csv`, containing `image_id` and the relevant label columns. The local Tamil legacy layout uses its labeled test CSV as gold. Keep gold labels private when distributing the public test set.
+Build your retrieval system using the training set. Evaluate and improve it using the labeled development set. The evaluator uses development by default and reads its label columns for Task B scoring. Once your system is ready, generate a submission for the test set, which contains query IDs and transcriptions without labels. Task B scoring requires labeled gold data; organizers can supply it using `--gold`.
 
 | Language | Culture keys | Training and gold label columns |
 | --- | --- | --- |
@@ -106,7 +111,7 @@ Run the evaluator with the language and your Task A submission:
 python evaluate.py --language tamil --task a --submission path/to/task_a.json
 ```
 
-For a partial trial, add `--trial`. The evaluator selects the submitted query IDs from the test CSV in memory:
+For a partial trial, add `--trial`. The evaluator selects the submitted query IDs from the development CSV in memory:
 
 ```bash
 python evaluate.py --language tamil --task a --submission path/to/task_a.json --trial
@@ -118,7 +123,7 @@ To process more requests at once, add `--concurrency 5`. Available capacity and 
 
 ## 5. Evaluate Task B
 
-With the gold file in place, run:
+With development labels in the development CSV, run:
 
 ```bash
 python evaluate.py --language tamil --task b --submission path/to/task_b.json
@@ -132,7 +137,7 @@ You can check either submission without scoring or Gemini access:
 python evaluate.py --language tamil --task a --submission path/to/task_a.json --validate-only
 ```
 
-Add `--trial` to validate a subset. Validation checks the submission and CSVs; it does not check images or API access.
+Add `--trial` to validate a subset. Validation checks the submission and CSVs; it does not check images or API access. To validate a test submission, add `--queries datasets/tamil/test/test.csv`. For Task A scoring against that set, also provide `--query-images datasets/tamil/test/`.
 
 ## How scoring works
 
@@ -151,11 +156,11 @@ Use `python evaluate.py --help` to see the options in the terminal. Paths passed
 | `--submission` | Path to the submission JSON or JSONL. | Required |
 | `--trial` | Allow a submission covering a subset of query IDs. | Full query coverage required |
 | `--validate-only` | Validate the submission and count pairs without scoring. | Scoring enabled |
-| `--queries` | Override the query CSV. | `datasets/<language>/test.csv` |
-| `--train` | Override the training CSV. | `datasets/<language>/train.csv` |
-| `--gold` | Override the Task B private gold CSV. | `private/<language>/gold.csv` |
-| `--query-images` | Override the Task A query image folder. | `datasets/<language>/test_images/` |
-| `--train-images` | Override the Task A training image folder. | `datasets/<language>/train_images/` |
+| `--queries` | Select another query CSV, such as the test CSV. | `datasets/<language>/development/development.csv` |
+| `--train` | Override the training CSV. | `datasets/<language>/train/train.csv` |
+| `--gold` | Select a labeled CSV for Task B scoring. | Selected query CSV |
+| `--query-images` | Override the Task A query image folder. | `datasets/<language>/development/` |
+| `--train-images` | Override the Task A training image folder. | `datasets/<language>/train/` |
 | `--model` | Set the Gemini model for Task A. | `gemini-3.8-flash` |
 | `--thinking` | Set the thinking level to `LOW`, `MEDIUM`, or `HIGH`. | `LOW` |
 | `--concurrency` | Set the maximum number of simultaneous Task A judgments. | `1` |
@@ -164,4 +169,4 @@ Use `python evaluate.py --help` to see the options in the terminal. Paths passed
 | `--output` | Set the score JSON path. | Timestamped directory under `outputs/runs/` |
 | `--max-judge-pairs` | Reject Task A submissions exceeding this number of pairs. | `0`, meaning no limit |
 
-Default data paths are resolved relative to the repository. If the standard Tamil query and train CSVs are missing, the evaluator falls back to the existing `datasets/tamil/test-with-labels/` and `datasets/tamil/train & dev/train/` layout. For a fresh Task A judgment of the same inputs and settings, supply a new `--cache` path.
+Default data paths are resolved relative to the repository. If the standard Tamil development or train CSV is missing, the evaluator uses the existing `datasets/tamil/train & dev/dev/dev.csv` or `datasets/tamil/train & dev/train/train.csv` respectively. For a fresh Task A judgment of the same inputs and settings, supply a new `--cache` path.
